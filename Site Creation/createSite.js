@@ -10,7 +10,7 @@ var csTemplates = {};
 // Initialize on page ready
 $(document).ready(function() {
 	getTemplates(); // On page load, get list of templates and populate select box
-	$('#CS-url').val(_spPageContextInfo["webAbsoluteUrl"]); // Default URL to current URL
+	$('#CS-parent').val(_spPageContextInfo["webAbsoluteUrl"]); // Default URL to current URL
 });
 
 // Page will prompt for: URL, Name, Description, Template, Inherit permissions
@@ -20,9 +20,10 @@ function doIt() {
 	
 	var projectName = $("#CS-name").val();
 	var projectDescription = $("#CS-description").val();
+	var projectParentURL = $('#CS-parent').val();
 	var projectURL = $("#CS-url").val();
 	var projectTemplate = $("#CS-template").val();
-	var projectPermissions = $("#CS-permissions").val();
+	var projectPermissions = $("#CS-permissions").val() == "Yes"?true:false;
 	
 	$('#CS-results').html('Starting the build for <a href="' + projectURL + '">' + projectName + '</a>');
 
@@ -31,37 +32,72 @@ function doIt() {
 	//console.log(csTemplates[projectTemplate]);
 
 // Check URL, create it if it does not exist
+	var URLinuse = false;
+	var checkURLpromise = $.ajax({
+		url: projectParentURL + '/' + projectURL + "/_api/web",
+		success: function(data) {
+			appendMessage("<b>URL already in use</b>");
+			URLinuse = true;
+		}
+	});
 // Validate URL is in same site collection as this page/script
 
-// For each group name suffix
-	// Validate that generated group name will be unique
-	if (projectPermissions == 'Yes') {
-		var groupPrefix = "Project " + projectName + " ";
-		var groups = csTemplates[projectTemplate].Groups;
-		$.each(groups, function(groupName, createGroup) {
-			//console.log(groupName + ": " + createGroup);
-			if (createGroup == "Y") {
-				// Create group
-				createNewGroup(groupPrefix + groupName, projectURL, projectName);
-			}
-		});
-	} else {
-		appendMessage('Not creating any groups as requested');
-	}
+	$.when(checkURLpromise).always(function() {
+		
+		createNewSite(projectParentURL, projectURL, projectName, projectDescription, projectPermissions);
+		
+		// For each group name suffix
+		// Validate that generated group name will be unique
+		if (projectPermissions) {
+			var groupPrefix = "Project " + projectName + " ";
+			var groups = csTemplates[projectTemplate].Groups;
+			$.each(groups, function(groupName, createGroup) {
+				//console.log(groupName + ": " + createGroup);
+				if (createGroup == "Y") {
+					// Create group
+					createNewGroup(groupPrefix + groupName, projectURL, projectName);
+				}
+			});
+		} else {
+			appendMessage('Not creating any groups as requested');
+		}
 	
 	// Populate initial members if appropriate
 
-// For each List Name
-	// Find list by name
-		// If not found, create it
-	// If found, add content types
-	// Set permissions for groups
+	// For each List Name
+		// Find list by name
+			// If not found, create it
+		// If found, add content types
+		// Set permissions for groups
+	
+	}); // End of checkURLpromise
 	
 	return false;
 }
 
 function appendMessage(message) {
 	$('#CS-results').append('<br/>' + message);
+}
+
+function createNewSite(rootUrl, URL, title, description, uniquePermissions) {
+	
+    return $.ajax({
+      url: rootUrl + "/_api/web/webinfos/add",
+      type: "POST",
+      data: JSON.stringify({
+        'parameters': {
+          '__metadata': {
+            'type': 'SP.WebInfoCreationInformation'
+          },
+          'Url': URL,
+          'Title': title,
+          'Description': description,
+          'Language': 1033,
+          'WebTemplate': 'sts',
+          'UseUniquePermissions': uniquePermissions
+        }
+      })
+    });
 }
 
 function createNewGroup(groupName, siteURL, projectName) {
