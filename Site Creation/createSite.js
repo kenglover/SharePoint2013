@@ -6,6 +6,8 @@ $.ajaxSetup({
 			}
 });
 var csTemplates = {};
+var baseRoleDefs = {};
+var groupIds = {};
 
 // Initialize on page ready
 $(document).ready(function() {
@@ -22,8 +24,10 @@ function doIt() {
 	var projectDescription = $("#CS-description").val();
 	var projectParentURL = $('#CS-parent').val();
 	var projectURL = $("#CS-url").val();
-	var projectTemplate = $("#CS-template").val();
+	var projectTemplate = csTemplates[$("#CS-template").val()];
 	var projectPermissions = $("#CS-permissions").val() == "Yes"?true:false;
+	
+	var groupPrefix = "Project " + projectName + " ";
 	
 	$('#CS-results').html('Starting the build for <a href="' + projectURL + '">' + projectName + '</a>');
 
@@ -40,26 +44,42 @@ function doIt() {
 			URLinuse = true;
 		}
 	});
+	
+	var baseRolesPromise = getBaseRoles(projectParentURL);
 // Validate URL is in same site collection as this page/script
 
-	$.when(checkURLpromise).always(function() {
+	$.when(checkURLpromise, baseRolesPromise).always(function() {
+		var deferedGroup1 = [];
 		
-		createNewSite(projectParentURL, projectURL, projectName, projectDescription, projectPermissions);
-		
-		// For each group name suffix
-		// Validate that generated group name will be unique
-		if (projectPermissions) {
-			var groupPrefix = "Project " + projectName + " ";
-			var groups = csTemplates[projectTemplate].Groups;
-			$.each(groups, function(groupName, createGroup) {
-				//console.log(groupName + ": " + createGroup);
-				if (createGroup == "Y") {
-					// Create group
-					createNewGroup(groupPrefix + groupName, projectURL, projectName);
-				}
+		if (!URLinuse) {
+			deferedGroup1.push(createNewSite(projectParentURL, projectURL, projectName, projectDescription, projectPermissions));
+				
+			// For each group name suffix
+			// Validate that generated group name will be unique
+			if (projectPermissions) {
+				
+				$.each(projectTemplate.Groups, function(index, group) {
+					//console.log(groupName + ": " + createGroup);
+					if (group.createGroup == "Y") {
+						// Create group
+						deferedGroup1.push(createNewGroup(groupPrefix + group.groupName, projectParentURL + "/" + projectURL, projectName));
+					}
+				});
+				
+			} else {
+				appendMessage('Not creating any groups as requested');
+			}
+			console.log(deferedGroup1);
+			$.when.apply($, deferedGroup1).always(function() { 
+				// Site created and groups defined
+				$.each(projectTemplate.Groups, function(index, group) {
+					if (group.createGroup == "Y") {
+						addGroupToSite(groupPrefix + group.groupName,projectParentURL + "/" + projectURL, group.groupPermission, 0);
+					} else {
+						addGroupToSite(group.groupName,projectParentURL + "/" + projectURL, group.groupPermission, 0);
+					}
+				});
 			});
-		} else {
-			appendMessage('Not creating any groups as requested');
 		}
 	
 	// Populate initial members if appropriate
@@ -79,8 +99,70 @@ function appendMessage(message) {
 	$('#CS-results').append('<br/>' + message);
 }
 
-function createNewSite(rootUrl, URL, title, description, uniquePermissions) {
+function getBaseRoles(rootUrl) {
+	return $.ajax({
+		url: rootUrl + "/_api/Web/roledefinitions",
+		type: "GET",
+		success: function(data) {
+			$.each(data.d.results, function(index,result) {
+				baseRoleDefs[result.Name] = result.Id;
+			});
+			console.log("Done baseRoleDefs");
+			console.log(baseRoleDefs);
+		}
+	});
+}
+
+function addGroupToSite(groupName, URL, permission, trycount) {
+	console.log("Time to tie group " + groupName + " to site with permission " + permission);
+	var getGroupPromise;
+	var groupId;
 	
+	if (trycount > 9) {
+		// Giving up
+		console.log("Had to give up after 10 tries adding group to site, got too many 404 errors");
+		appendMessage("<b>Error:</b> could not add group " + groupName + " to site");
+		return;
+	}
+	
+	if (groupIds[groupName]) {
+		groupId = groupIds[groupName];
+	} else {
+		// Need to do an ajax all to get group by name
+		getGroupPromise = $.ajax({
+			url: URL + "/_api/web/sitegroups/getbyname('" + groupName + "')/id",
+			method: "GET",
+			success: function(data) {
+				groupId = data.d.Id;
+			},
+			statusCode: {
+				404: function() {
+					// URL not found 
+					addGroupToSite(groupName, URL, permission, trycount+1);
+				}
+			}
+		});
+	}
+	
+	$.when(getGroupPromise).done(function() {
+		return $.ajax({
+			url: URL + "/_api/web/roleassignments/addroleassignment(principalid=" + groupId + ",roledefid=" + baseRoleDefs[permission] + ")",
+			method: "POST",
+			success: function(data) {
+				appendMessage("Gave group " + groupName + " site permission " + permission);
+			},
+			statusCode: {
+				404: function() {
+					// URL not found 
+					addGroupToSite(groupName, URL, permission, trycount+1);
+				}
+			}
+		});
+	});
+}
+
+function createNewSite(rootUrl, URL, title, description, uniquePermissions) {
+	// Based on http://sympmarc.com/2014/03/30/create-a-subsite-in-sharepoint-2013-using-rest-calls/
     return $.ajax({
       url: rootUrl + "/_api/web/webinfos/add",
       type: "POST",
@@ -118,6 +200,7 @@ function createNewGroup(groupName, siteURL, projectName) {
 			console.log("Created group " + groupName);
 			console.log(data);
 			appendMessage('Created group: <a href="' + _spPageContextInfo["webAbsoluteUrl"] + '/_layouts/15/people.aspx?MembershipGroupId=' + data.d.Id + '">' + groupName + '</a>');
+			groupIds[groupName] = data.d.Id;
 		},
 		error: function(data) {
 			console.log("Failed to create group " + groupName);
