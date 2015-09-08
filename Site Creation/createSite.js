@@ -81,10 +81,17 @@ function doIt() {
 				});
 			});
 		}
-	
-	// Populate initial members if appropriate
+		
+		// Populate initial members if appropriate
 
-	// For each List Name
+		// For each List Name
+		$.when.apply($, deferedGroup1).always(function() {
+			$.each(projectTemplate.lists, function(index, list) {
+				// name, type, contentTypes [""], inheritPermssions, permissions [groupName, groupPermission]
+				createList(list, projectParentURL + "/" + projectURL,0);
+
+			});
+		});
 		// Find list by name
 			// If not found, create it
 		// If found, add content types
@@ -93,6 +100,72 @@ function doIt() {
 	}); // End of checkURLpromise
 	
 	return false;
+}
+
+function createList (list, URL,trycount) {
+	if (trycount > 50) {
+		appendMessage("<b>Error:</b> Gave up trying to create list " + list.name + " after " + trycount + " tries. Too many 404 on create");
+		return;
+	}
+	var listID;
+	// Check to see if list already exists, if not then create the list
+	$.ajax({
+		url: URL + "/_api/web/lists/getbytitle('" + list.name + "')",
+		method: "GET",
+		success: function(data) {
+			listID = data.d.Id;
+			appendMessage("Found list " + list.name + "already exists");
+		},
+		error: function() {
+			// List does not exist, create it
+			$.ajax({
+				url: URL + "/_api/web/lists",
+				method: "POST",
+				data: JSON.stringify({"__metadata":{"type":"SP.List"}, 
+					"AllowContentTypes": true, 
+					"BaseTemplate": 100, 
+					"ContentTypesEnabled":true, 
+					"Description":"Autocreated " + list.name, 
+					"Title":list.name}),
+				success: function(data) {
+					listID = data.d.Id;
+					appendMessage("Created list " + list.name);
+					connectContentTypes(listID, list, URL);
+				},
+				statusCode: {
+					404: function() {
+						createList(list, URL, trycount+1);
+					}
+				}
+			});
+		}
+	});
+}
+
+function connectContentTypes(listID, list, URL) {
+	$.each(list.contentTypes, function(index, ct) {
+		console.log("Looking at add CT " + ct + " to list " + list.name);
+		$.ajax({
+			url: _spPageContextInfo["siteAbsoluteUrl"] + "/_api/web/contentTypes?$filter=Name eq '" + ct + "'",
+			method: "GET",
+			success: function(data) {
+				var cts = data.d.results;
+				if (cts) {
+					var ctID = cts[0].StringId;
+					$.ajax({
+						url: URL + "/_api/web/lists/getbytitle('" + list.name + "')/ContentTypes/addAvailableContentType",
+						method: "POST",
+						data: JSON.stringify({"contentTypeId":ctID}),
+						success: function(data) {
+							appendMessage("Added Content Type " + ct + " to list " + list.name);
+						}
+					});
+				} else {
+					appendMessage("Could not find content Type " + ct);
+				}
+			}
+		});
+	});
 }
 
 function appendMessage(message) {
@@ -118,9 +191,9 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 	var getGroupPromise;
 	var groupId;
 	
-	if (trycount > 9) {
+	if (trycount > 50) {
 		// Giving up
-		console.log("Had to give up after 10 tries adding group to site, got too many 404 errors");
+		console.log("Had to give up after " + trycount + " tries adding group to site, got too many 404 errors");
 		appendMessage("<b>Error:</b> could not add group " + groupName + " to site");
 		return;
 	}
@@ -134,6 +207,7 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 			method: "GET",
 			success: function(data) {
 				groupId = data.d.Id;
+				groupIds[groupName] = groupId; // Add the looked up group ID to the array to be used later when lists are created.
 			},
 			statusCode: {
 				404: function() {
