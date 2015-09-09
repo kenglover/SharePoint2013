@@ -8,6 +8,8 @@ $.ajaxSetup({
 var csTemplates = {};
 var baseRoleDefs = {};
 var groupIds = {};
+var groupPrefix;
+var projectTemplate;
 
 // Initialize on page ready
 $(document).ready(function() {
@@ -24,12 +26,21 @@ function doIt() {
 	var projectDescription = $("#CS-description").val();
 	var projectParentURL = $('#CS-parent').val();
 	var projectURL = $("#CS-url").val();
-	var projectTemplate = csTemplates[$("#CS-template").val()];
+	projectTemplate = csTemplates[$("#CS-template").val()];
 	var projectPermissions = $("#CS-permissions").val() == "Yes"?true:false;
 	
-	var groupPrefix = "Project " + projectName + " ";
+	// We will need the group names findable by the group suffix as presented in the template file later on, so create the object now.
+	groupPrefix = "Project " + projectName + " ";
+	$.each(projectTemplate.Groups, function(index, group) {
+		if (group.createGroup == "Y") {
+			// The name presented is a suffix
+			groupIds[group.groupName] = {"systemName":groupPrefix + group.groupName, "id":null};
+		} else {
+			groupIds[group.groupName] = {"systemName":group.groupName, "id":null};
+		}
+	});
 	
-	$('#CS-results').html('Starting the build for <a href="' + projectURL + '">' + projectName + '</a>');
+	$('#CS-results').html('Starting the build for <a href="' + projectParentURL + "/" + projectURL + '">' + projectName + '</a>');
 
 // Read template configuration JSON
 // { Template, {group name or suffix, suffix indicator}, {List Name, List Template, {Content Type Name, Content Type ID}, {Group name or suffix, permission} }}
@@ -62,7 +73,7 @@ function doIt() {
 					//console.log(groupName + ": " + createGroup);
 					if (group.createGroup == "Y") {
 						// Create group
-						deferedGroup1.push(createNewGroup(groupPrefix + group.groupName, projectParentURL + "/" + projectURL, projectName));
+						deferedGroup1.push(createNewGroup(group.groupName, projectParentURL + "/" + projectURL, projectName));
 					}
 				});
 				
@@ -73,11 +84,7 @@ function doIt() {
 			$.when.apply($, deferedGroup1).always(function() { 
 				// Site created and groups defined
 				$.each(projectTemplate.Groups, function(index, group) {
-					if (group.createGroup == "Y") {
-						addGroupToSite(groupPrefix + group.groupName,projectParentURL + "/" + projectURL, group.groupPermission, 0);
-					} else {
 						addGroupToSite(group.groupName,projectParentURL + "/" + projectURL, group.groupPermission, 0);
-					}
 				});
 			});
 		}
@@ -131,6 +138,9 @@ function createList (list, URL,trycount) {
 					listID = data.d.Id;
 					appendMessage("Created list " + list.name);
 					connectContentTypes(listID, list, URL);
+					if (!list.inheritPermissions) {
+						setListPermissions(listID, list, URL);
+					}
 				},
 				statusCode: {
 					404: function() {
@@ -152,19 +162,60 @@ function connectContentTypes(listID, list, URL) {
 				var cts = data.d.results;
 				if (cts) {
 					var ctID = cts[0].StringId;
-					$.ajax({
-						url: URL + "/_api/web/lists/getbytitle('" + list.name + "')/ContentTypes/addAvailableContentType",
-						method: "POST",
-						data: JSON.stringify({"contentTypeId":ctID}),
-						success: function(data) {
-							appendMessage("Added Content Type " + ct + " to list " + list.name);
-						}
-					});
+					addCTtoList(ctID, ct, list, URL, 0);
 				} else {
 					appendMessage("Could not find content Type " + ct);
 				}
 			}
 		});
+	});
+	function addCTtoList(ctID, ct, list, URL, trycount) {
+		if (trycount > 50) {
+			console.log("Giving up after 50 tries");
+			return;
+		}
+		$.ajax({
+			url: URL + "/_api/web/lists/getbytitle('" + list.name + "')/ContentTypes/addAvailableContentType",
+			method: "POST",
+			data: JSON.stringify({"contentTypeId":ctID}),
+			success: function(data) {
+				appendMessage("Added Content Type " + ct + " to list " + list.name + " on try " + trycount);
+			},
+			statusCode: {
+				500: function() {
+					addCTtoList(ctID, ct, list, URL, trycount+1);
+				},
+				409: function() {
+					addCTtoList(ctID, ct, list, URL, trycount+1);
+				}
+			}
+		});
+	}
+
+}
+
+function setListPermissions(listID, list, URL) {
+	// Need to stop inheriting, blank permissions, and then set the new permissions
+	console.log("Setting permissions for list " + list.name);
+	// Break the permission inheritance and remove existing permissions.
+	$.ajax({
+		url: URL + "/_api/web/lists/getByTitle('" + list.name + "')/breakroleinheritance(copyRoleAssignments=false, clearSubscopes=false)",
+		method: "POST",
+		success: function() {
+			$.each(list.permissions, function(index, permission) {
+				// Assign permission for this group
+				var groupId = getGroupId(permission.groupName, 0);
+				
+				console.log(permission);
+				$.ajax({
+					url: URL + "/_api/web/lists/getbytitle('" + list.name + "')/roleassignments/addroleassignment(principalid=" + groupId + ",roledefid=" + baseRoleDefs[permission.groupPermission] + ")",
+					method: "POST",
+					success: function(data) {
+						appendMessage("Gave permission to " + permission.groupName + " to list " + list.name);
+					}
+				});
+			});
+		}
 	});
 }
 
@@ -186,6 +237,41 @@ function getBaseRoles(rootUrl) {
 	});
 }
 
+function getGroupId(groupName, trycount) {
+	var getGroupPromise;
+
+	if (trycount > 50) {
+		console.log("Could not find ID for group " + groupName);
+		return null;
+	}
+
+	var groupId = groupIds[groupName].id;
+
+	if (!groupId) {
+		// Need to do an ajax all to get group by name
+		getGroupPromise = $.ajax({
+			url: _spPageContextInfo["siteAbsoluteUrl"] + "/_api/web/sitegroups/getbyname('" + groupIds[groupName].systemName + "')/id",
+			method: "GET",
+			async: false,
+			success: function(data) {
+				groupId = data.d.Id;
+				groupIds[groupName].id = groupId; // Add the looked up group ID to the array to be used later.
+			},
+			statusCode: {
+				404: function(data) {
+					groupId = getGroupId(groupName, trycount+1)
+				}
+			}
+		});
+	}
+
+	$.when(getGroupPromise).always(function() {
+		return groupId;
+	});
+
+	return groupId;
+}
+
 function addGroupToSite(groupName, URL, permission, trycount) {
 	console.log("Time to tie group " + groupName + " to site with permission " + permission);
 	var getGroupPromise;
@@ -198,25 +284,7 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 		return;
 	}
 	
-	if (groupIds[groupName]) {
-		groupId = groupIds[groupName];
-	} else {
-		// Need to do an ajax all to get group by name
-		getGroupPromise = $.ajax({
-			url: URL + "/_api/web/sitegroups/getbyname('" + groupName + "')/id",
-			method: "GET",
-			success: function(data) {
-				groupId = data.d.Id;
-				groupIds[groupName] = groupId; // Add the looked up group ID to the array to be used later when lists are created.
-			},
-			statusCode: {
-				404: function() {
-					// URL not found 
-					addGroupToSite(groupName, URL, permission, trycount+1);
-				}
-			}
-		});
-	}
+	groupId = getGroupId(groupName, 0);
 	
 	$.when(getGroupPromise).done(function() {
 		return $.ajax({
@@ -263,7 +331,7 @@ function createNewGroup(groupName, siteURL, projectName) {
 		url: _spPageContextInfo["webAbsoluteUrl"] + "/_api/web/siteGroups",
 		type: "POST",
 		data: JSON.stringify({ '__metadata':{ 'type': 'SP.Group' },
-					'Title':groupName,
+					'Title':groupIds[groupName].systemName,
 					'Description':'Group for project ' + projectName + ' at URL ' + siteURL,
 					'AllowMembersEditMembership':'false',
 					'AllowRequestToJoinLeave':'false', 
@@ -274,12 +342,12 @@ function createNewGroup(groupName, siteURL, projectName) {
 			console.log("Created group " + groupName);
 			console.log(data);
 			appendMessage('Created group: <a href="' + _spPageContextInfo["webAbsoluteUrl"] + '/_layouts/15/people.aspx?MembershipGroupId=' + data.d.Id + '">' + groupName + '</a>');
-			groupIds[groupName] = data.d.Id;
+			groupIds[groupName].id = data.d.Id;
 		},
 		error: function(data) {
 			console.log("Failed to create group " + groupName);
 			console.log(data);
-			appendMessage('<b>Failure</b> to create group: ' + groupName);
+			appendMessage('<b>Failure</b> to create group: ' + groupName + " as " + groupIds[groupName].systemName);
 			appendMessage('&nbsp;&nbsp;Message: '+data.responseJSON.error.message.value);
 		}
 	});
