@@ -5,11 +5,15 @@ $.ajaxSetup({
 				"X-REQUESTDIGEST" : $('#__REQUESTDIGEST').val()
 			}
 });
+
+var maxRetryCount = 50; //How many times will we retry on calls when we get expected errors that may indicate the server is not ready?
 var csTemplates = {};
 var baseRoleDefs = {};
 var groupIds = {};
 var groupPrefix;
 var projectTemplate;
+var listTemplateTypes = // Would be nice if there was a way to get this from the server, but it appears we have to hard code it.
+		{"GenericList":100, "DocumentLibrary":101, "Survey":102, "Links":103, "Announcements":104, "Contacts":105, "Events":106, "Tasks":107, "DiscussionBoard":108, "PictureLibrary":109};
 
 // Initialize on page ready
 $(document).ready(function() {
@@ -109,8 +113,9 @@ function doIt() {
 	return false;
 }
 
+// TODO: Setup list with the correct type
 function createList (list, URL,trycount) {
-	if (trycount > 50) {
+	if (trycount > maxRetryCount) {
 		appendMessage("<b>Error:</b> Gave up trying to create list " + list.name + " after " + trycount + " tries. Too many 404 on create");
 		return;
 	}
@@ -125,12 +130,13 @@ function createList (list, URL,trycount) {
 		},
 		error: function() {
 			// List does not exist, create it
+			var baseTemplate = listTemplateTypes[list.type];
 			$.ajax({
 				url: URL + "/_api/web/lists",
 				method: "POST",
 				data: JSON.stringify({"__metadata":{"type":"SP.List"}, 
 					"AllowContentTypes": true, 
-					"BaseTemplate": 100, 
+					"BaseTemplate": baseTemplate, 
 					"ContentTypesEnabled":true, 
 					"Description":"Autocreated " + list.name, 
 					"Title":list.name}),
@@ -141,6 +147,9 @@ function createList (list, URL,trycount) {
 					if (!list.inheritPermissions) {
 						setListPermissions(listID, list, URL);
 					}
+				},
+				error: function(data) {
+					appendMessage("<b>Error:</b>Could not create list " + list.name)
 				},
 				statusCode: {
 					404: function() {
@@ -170,8 +179,8 @@ function connectContentTypes(listID, list, URL) {
 		});
 	});
 	function addCTtoList(ctID, ct, list, URL, trycount) {
-		if (trycount > 50) {
-			console.log("Giving up after 50 tries");
+		if (trycount > maxRetryCount) {
+			console.log("Giving up after " + trycount + " tries");
 			return;
 		}
 		$.ajax({
@@ -240,7 +249,7 @@ function getBaseRoles(rootUrl) {
 function getGroupId(groupName, trycount) {
 	var getGroupPromise;
 
-	if (trycount > 50) {
+	if (trycount > maxRetryCount) {
 		console.log("Could not find ID for group " + groupName);
 		return null;
 	}
@@ -277,7 +286,7 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 	var getGroupPromise;
 	var groupId;
 	
-	if (trycount > 50) {
+	if (trycount > maxRetryCount) {
 		// Giving up
 		console.log("Had to give up after " + trycount + " tries adding group to site, got too many 404 errors");
 		appendMessage("<b>Error:</b> could not add group " + groupName + " to site");
