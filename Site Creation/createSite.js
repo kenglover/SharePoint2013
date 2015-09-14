@@ -94,7 +94,7 @@ function doIt() {
 			});
 		}
 		
-		// Populate initial members if appropriate
+		//TODO Populate initial members if appropriate. Note we need something in the template to instruct us.
 
 		// For each List Name
 		$.when.apply($, deferedGroup1).then(function() {
@@ -104,17 +104,12 @@ function doIt() {
 
 			});
 		});
-		// Find list by name
-			// If not found, create it
-		// If found, add content types
-		// Set permissions for groups
 	
 	}); // End of checkURLpromise
 	
 	return false;
 }
 
-// TODO: Setup list with the correct type
 function createList (list, URL,trycount) {
 	if (trycount > maxRetryCount) {
 		appendMessage("<b>Error:</b> Gave up trying to create list " + list.name + " after " + trycount + " tries. Too many 404 on create");
