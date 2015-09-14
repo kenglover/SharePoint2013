@@ -61,10 +61,11 @@ function doIt() {
 	});
 	
 	var baseRolesPromise = getBaseRoles(projectParentURL);
-// Validate URL is in same site collection as this page/script
 
+	//TODO Validate URL is in same site collection as this page/script
+	var deferedGroup1 = [];
 	$.when(checkURLpromise, baseRolesPromise).always(function() {
-		var deferedGroup1 = [];
+		
 		
 		if (!URLinuse) {
 			deferedGroup1.push(createNewSite(projectParentURL, projectURL, projectName, projectDescription, projectPermissions));
@@ -85,7 +86,7 @@ function doIt() {
 				appendMessage('Not creating any groups as requested');
 			}
 			console.log(deferedGroup1);
-			$.when.apply($, deferedGroup1).always(function() { 
+			$.when.apply($, deferedGroup1).then(function() { 
 				// Site created and groups defined
 				$.each(projectTemplate.Groups, function(index, group) {
 						addGroupToSite(group.groupName,projectParentURL + "/" + projectURL, group.groupPermission, 0);
@@ -96,7 +97,7 @@ function doIt() {
 		// Populate initial members if appropriate
 
 		// For each List Name
-		$.when.apply($, deferedGroup1).always(function() {
+		$.when.apply($, deferedGroup1).then(function() {
 			$.each(projectTemplate.lists, function(index, list) {
 				// name, type, contentTypes [""], inheritPermssions, permissions [groupName, groupPermission]
 				createList(list, projectParentURL + "/" + projectURL,0);
@@ -296,8 +297,7 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 		appendMessage("<b>Error:</b> could not add group " + groupName + " to site");
 		return;
 	}
-	
-	$.when(getGroupId(groupName,0)).then(function(response) {
+	return $.when(getGroupId(groupName,0)).then(function(response) {
 		groupId = response;
 
 	
@@ -319,29 +319,37 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 
 function createNewSite(rootUrl, URL, title, description, uniquePermissions) {
 	// Based on http://sympmarc.com/2014/03/30/create-a-subsite-in-sharepoint-2013-using-rest-calls/
-    return $.ajax({
-      url: rootUrl + "/_api/web/webinfos/add",
-      type: "POST",
-      data: JSON.stringify({
-        'parameters': {
-          '__metadata': {
-            'type': 'SP.WebInfoCreationInformation'
-          },
-          'Url': URL,
-          'Title': title,
-          'Description': description,
-          'Language': 1033,
-          'WebTemplate': 'sts',
-          'UseUniquePermissions': uniquePermissions
-        }
-      })
-    });
+	console.log("Starting createNewSite");
+	return $.ajax({
+		url: rootUrl + "/_api/web/webinfos/add",
+		type: "POST",
+		data: JSON.stringify({
+			'parameters': {
+				'__metadata': {
+					'type': 'SP.WebInfoCreationInformation'
+				},
+				'Url': URL,
+				'Title': title,
+				'Description': description,
+				'Language': 1033,
+				'WebTemplate': 'sts',
+				'UseUniquePermissions': uniquePermissions
+			}
+		}),
+		success: function(data) {
+			appendMessage("Created site");
+		},
+		error: function(data) {
+			appendMessage("<b>Failed to create site</b>: no further actions to be taken");
+		}
+	});
 }
 
 function createNewGroup(groupName, siteURL, projectName) {
 	console.log("creating group " + groupName + " for project " + projectName + " at URL " + siteURL);
+	var createGroupPromise = $.Deferred();
 
-	return $.ajax({
+	$.ajax({
 		url: _spPageContextInfo["webAbsoluteUrl"] + "/_api/web/siteGroups",
 		type: "POST",
 		data: JSON.stringify({ '__metadata':{ 'type': 'SP.Group' },
@@ -357,14 +365,17 @@ function createNewGroup(groupName, siteURL, projectName) {
 			console.log(data);
 			appendMessage('Created group: <a href="' + _spPageContextInfo["webAbsoluteUrl"] + '/_layouts/15/people.aspx?MembershipGroupId=' + data.d.Id + '">' + groupName + '</a>');
 			groupIds[groupName].id = data.d.Id;
+			createGroupPromise.resolve();
 		},
 		error: function(data) {
 			console.log("Failed to create group " + groupName);
 			console.log(data);
 			appendMessage('<b>Failure</b> to create group: ' + groupName + " as " + groupIds[groupName].systemName);
 			appendMessage('&nbsp;&nbsp;Message: '+data.responseJSON.error.message.value);
+			createGroupPromise.resolve();
 		}
 	});
+	return createGroupPromise;
 
 }
 
