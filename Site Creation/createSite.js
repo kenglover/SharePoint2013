@@ -204,6 +204,7 @@ function connectContentTypes(listID, list, URL) {
 }
 
 function setListPermissions(listID, list, URL) {
+	var groupId;
 	// Need to stop inheriting, blank permissions, and then set the new permissions
 	console.log("Setting permissions for list " + list.name);
 	// Break the permission inheritance and remove existing permissions.
@@ -213,15 +214,19 @@ function setListPermissions(listID, list, URL) {
 		success: function() {
 			$.each(list.permissions, function(index, permission) {
 				// Assign permission for this group
-				var groupId = getGroupId(permission.groupName, 0);
+				$.when(getGroupId(permission.groupName,0)).then(function(response) {
+					groupId = response;
 				
-				console.log(permission);
-				$.ajax({
-					url: URL + "/_api/web/lists/getbytitle('" + list.name + "')/roleassignments/addroleassignment(principalid=" + groupId + ",roledefid=" + baseRoleDefs[permission.groupPermission] + ")",
-					method: "POST",
-					success: function(data) {
-						appendMessage("Gave permission to " + permission.groupName + " to list " + list.name);
-					}
+
+					console.log("Got groupId = " + groupId);
+					console.log(permission);
+					$.ajax({
+						url: URL + "/_api/web/lists/getbytitle('" + list.name + "')/roleassignments/addroleassignment(principalid=" + groupId + ",roledefid=" + baseRoleDefs[permission.groupPermission] + ")",
+						method: "POST",
+						success: function(data) {
+							appendMessage("Gave permission to " + permission.groupName + " to list " + list.name);
+						}
+					});
 				});
 			});
 		}
@@ -247,7 +252,7 @@ function getBaseRoles(rootUrl) {
 }
 
 function getGroupId(groupName, trycount) {
-	var getGroupPromise;
+	var getGroupPromise = $.Deferred();
 
 	if (trycount > maxRetryCount) {
 		console.log("Could not find ID for group " + groupName);
@@ -258,13 +263,14 @@ function getGroupId(groupName, trycount) {
 
 	if (!groupId) {
 		// Need to do an ajax all to get group by name
-		getGroupPromise = $.ajax({
+		$.ajax({
 			url: _spPageContextInfo["siteAbsoluteUrl"] + "/_api/web/sitegroups/getbyname('" + groupIds[groupName].systemName + "')/id",
 			method: "GET",
-			async: false,
 			success: function(data) {
 				groupId = data.d.Id;
 				groupIds[groupName].id = groupId; // Add the looked up group ID to the array to be used later.
+				console.log("Resolving GroupID promise with groupId = " + groupId);
+				getGroupPromise.resolve(groupId);
 			},
 			statusCode: {
 				404: function(data) {
@@ -272,18 +278,16 @@ function getGroupId(groupName, trycount) {
 				}
 			}
 		});
+		console.log("returning groupID promise");
+		return getGroupPromise.promise();
 	}
 
-	$.when(getGroupPromise).always(function() {
-		return groupId;
-	});
-
+	console.log("Returning groupID = " + groupId);
 	return groupId;
 }
 
 function addGroupToSite(groupName, URL, permission, trycount) {
 	console.log("Time to tie group " + groupName + " to site with permission " + permission);
-	var getGroupPromise;
 	var groupId;
 	
 	if (trycount > maxRetryCount) {
@@ -293,10 +297,11 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 		return;
 	}
 	
-	groupId = getGroupId(groupName, 0);
+	$.when(getGroupId(groupName,0)).then(function(response) {
+		groupId = response;
+
 	
-	$.when(getGroupPromise).done(function() {
-		return $.ajax({
+		$.ajax({
 			url: URL + "/_api/web/roleassignments/addroleassignment(principalid=" + groupId + ",roledefid=" + baseRoleDefs[permission] + ")",
 			method: "POST",
 			success: function(data) {
