@@ -1,0 +1,26 @@
+<h1>Template Builder</h1>
+New Template Name: <input type="text" name="siteTemplate" id="siteTemplate" /> or select to edit <select name="CS-template" id="CS-template"><option value="">Select to edit</option></select> <button onclick="loadTemplate();">Load</button><br/>
+Site Template: <select name="siteTemplate" id="siteTemplate">
+	<option value="" selected>Select a site template</option>
+	<option value="sts">Team Site</option>
+	<optoon value="???">Publishing Site</option>
+</select> <br/>
+<hr/>
+Groups:<br/>
+Group Name/Suffixe: <input type="text" name="groupName" id="groupName" /><br/>
+Create Group: <select name="createGroup" id="createGroup"><option value="Y">Yes</option><option value="N">No</option></select><br/>
+Site Group permission: <select name="siteGroupPermission" id="siteGroupPermission"></select><br/>
+<button onclick="addGroup();">Add Group</button>
+<hr/>
+Lists:<br/>
+List Name: <input type="test" name="listName" id="listName" /><br/>
+List Template: <select name="listTemplate" id="listTemplate"><option value="" selected>Select a template</option></select><br/>
+Additional Content Types: <select name="contentType" id="contentType"><option value="" selected>Select a content type</option></select><button onclick="addCTtoList();">Add</button><br/>
+Inherit Permissions: <select name="inheritPermissions" id="inheritPermissions"><option value="Y">Yes</option><option value="N">No</option></select><br/>
+List Permissions Group Name: <select name="listGroup" id="listGroup"><option value="" selected>Select a group</option></select> Permission: <select name="listPermission" id="listPermission"></select> <button onclick="addListPerm();">Add</button><br/>
+<button onclick="addList();">Add List</button>
+<br/>
+<button onclick="saveTemplate();">Save Template</button><br/>
+
+<div id="templateDisplay">
+</div>
