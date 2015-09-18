@@ -49,11 +49,37 @@ function saveTemplate() {
 }
 
 function loadTemplate() {
-
+	template = csTemplates[$("#CS-template").val()];
+	displayTemplate();
 	return false;
 }
 
 // Utility functions
+function displayTemplate() {
+	console.log("displayTemplate called");
+	console.log(template);
+	$("#templateDisplay").html("Template: " + template.Template +
+		"<br/>Groups:<br/><table class=\"CSTemplateDiplay\" ><tbody id=\"CSGroups\"><tr><th>Name or Suffix</th><th>Create</th><th>Site Permission</th></tr></tbody></table>");
+	$.each(template.Groups, function(group, info) {
+		$("#CSGroups").append("<tr><td>" + info.groupName + "</td><td>" + info.createGroup + "</td><td>" + info.groupPermission + "</td></tr>");
+	});
+	$("#templateDisplay").append("<br/>Lists:<br/>");
+	$("#templateDisplay").append("<table class=\"CSTemplateDiplay\" ><tbody id=\"CSLists\"><tr><th>Name</th><th>Type</th><th>Content types</th><th>Inherit Permissions</th></tr></tbody></table>");
+	$.each(template.lists, function(i, list) {
+		$("#CSLists").append("<tr><td>" + list.name + "</td><td>" + list.type + "</td><td id=\"CTsFor" + i + "\"></td><td>" + list.inheritPermissions + "</td></tr>");
+		$.each(list.contentTypes, function(c, contentType) {
+			$("#CTsFor"+i).append(contentType + "<br/>");
+		});
+		if(!list.inheritPermissions) {
+			$("#CSLists").append("<tr ><th></th><th>Permissions</th><td colspan=\"2\"><table id=\"Perms"+i+"\"></table></tr>");
+			$.each(list.permissions, function(p, permission) {
+				$("#Perms"+i).append("<tr><td>" + permission.groupName + "</td><td>" + permission.groupPermission + "</td></tr>");
+			});
+		}
+	});
+
+}
+
 function getContentTypes() {
 	$.ajax({
 		url: _spPageContextInfo["siteAbsoluteUrl"] + "/_api/web/contentTypes?$filter=Hidden eq false&$select=Name, Description, Group",
@@ -61,7 +87,7 @@ function getContentTypes() {
 		success: function(data) {
 			$.each(data.d.results, function(i, ct) {
 				contentTypes[ct.Name] = {"Group": ct.Group, "Description":ct.Description};
-				$("contentType").append('<option>' + ct.Name + '</option>');
+				$("#contentType").append('<option>' + ct.Name + '</option>');
 			})
 		}
 	});
@@ -74,8 +100,8 @@ function getBaseRoles() {
 		success: function(data) {
 			$.each(data.d.results, function(index,result) {
 				baseRoleDefs[result.Name] = result.Id;
-				$("siteGroupPermission").append('<option>' + result.Name + '</option>');
-				$("listPermission").append('<option>' + result.Name + '</option>');
+				$("#siteGroupPermission").append('<option>' + result.Name + '</option>');
+				$("#listPermission").append('<option>' + result.Name + '</option>');
 			});
 			console.log("Done baseRoleDefs");
 			console.log(baseRoleDefs);
