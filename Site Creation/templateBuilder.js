@@ -4,7 +4,7 @@
 var contentTypes = {};
 var listTemplateTypes = // Would be nice if there was a way to get this from the server, but it appears we have to hard code it.
 		{"GenericList":100, "DocumentLibrary":101, "Survey":102, "Links":103, "Announcements":104, "Contacts":105, "Events":106, "Tasks":107, "DiscussionBoard":108, "PictureLibrary":109};
-var template = {"Groups":[], "lists":[]}; // The built up template
+var template = {"Groups":[], "lists":{}}; // The built up template
 var baseRoleDefs = {}; // Permission levels
 var csTemplates = {};
 
@@ -20,32 +20,51 @@ $("document").ready(function() {
 	getContentTypes();
 	getBaseRoles();
 	getTemplates();
+	$.each(listTemplateTypes, function(name, id) {
+		$('#listTemplate').append('<option>' + name + '</option');
+	});
+	$('#siteTemplate').change(function() { updateTemplate(); });
 });
 
 // Form button functions
 function addGroup() {
-
+	template.Groups.push({"groupName":$('#groupName').val(), "createGroup":$('#createGroup').val(), "groupPermission":$('#siteGroupPermission').val()});
+	$('#listGroup').append('<option>' + $('#groupName').val() + "</option>");
+	displayTemplate();
 	return false;
 }
 
 function addCTtoList() {
-
+	template.lists[$('#listName').val()]["contentTypes"].push($('#contentType').val());
+	displayTemplate();
 	return false;
 }
 
 function addListPerm() {
-
+	template.lists[$('#listName').val()]["permissions"].push({"groupName":$('#listGroup').val(),"groupPermission":$('#listPermission').val()});
+	displayTemplate();
 	return false;
 }
 
 function addList() {
-
+	if(!template.lists[$('#listName').val()]) {
+		template.lists[$('#listName').val()] = {"name":$('#listName').val(), "type":$('#listTemplate').val(), "inheritPermissions":$('#inheritPermissions').val()=="true"?true:false, "contentTypes":[], "permissions":[]};
+	} else {
+		template.lists[$('#listName').val()].type = $('#listTemplate').val();
+		template.lists[$('#listName').val()].inheritPermissions = $('#inheritPermissions').val()=="true"?true:false;
+	}
+	displayTemplate();
 	return false;
 }
 
 function saveTemplate() {
 
 	return false;
+}
+
+function updateTemplate() {
+	template['Template'] = $('#siteTemplate').val();
+	displayTemplate();
 }
 
 function loadTemplate() {
