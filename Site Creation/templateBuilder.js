@@ -20,6 +20,7 @@ $("document").ready(function() {
 	getContentTypes();
 	getBaseRoles();
 	getTemplates();
+	$('#siteTemplate').change(function() { updateTemplate(); });
 });
 
 // Form button functions
@@ -46,6 +47,11 @@ function addList() {
 function saveTemplate() {
 
 	return false;
+}
+
+function updateTemplate() {
+	template['Template'] = $('#siteTemplate').val();
+	displayTemplate();
 }
 
 function loadTemplate() {
