@@ -25,7 +25,8 @@ $("document").ready(function() {
 
 // Form button functions
 function addGroup() {
-
+	template.Groups.push({"groupName":$('#groupName').val(), "createGroup":$('#createGroup').val(), "groupPermission":$('#siteGroupPermission').val()});
+	displayTemplate();
 	return false;
 }
 
