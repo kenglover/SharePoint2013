@@ -58,7 +58,54 @@ function addList() {
 }
 
 function saveTemplate() {
-
+	if($("#siteTemplateName").val() == "") {
+		//TODO: Ask for template name
+	} else {
+		// Save template
+		var payloadObject = {'__metadata': {
+						'type': 'SP.Data.SiteTemplatesListItem'
+					},
+					"Configuration": JSON.stringify(template)};
+		$.ajax({
+			url: _spPageContextInfo["webAbsoluteUrl"] + "/_api/web/lists/getbytitle('SiteTemplates')/items?$filter=Title eq '" + $("#siteTemplateName").val() + "'" ,
+			type: "GET",
+			success: function(data) {
+				if(data.d.results[0]) {
+					// Found an existing one with this name
+					console.log(data);
+					console.log("Existing Template " + data.d.results[0].Id);
+					$.ajax({
+						url: _spPageContextInfo["webAbsoluteUrl"] + "/_api/web/lists/getbytitle('SiteTemplates')/items(" +data.d.results[0].Id + ")",
+						method: "POST",
+						data: JSON.stringify(payloadObject),
+						headers: { "X-HTTP-Method": "MERGE",
+								"If-Match": data.d.results[0].__metadata.etag },
+						success: function(data2) {
+							console.log(data2);
+							//TODO: Put up "saved" message
+						}
+					});
+				} else {
+					// New template
+					console.log("New Template");
+					payloadObject["Title"] = $("#siteTemplateName").val();
+					$.ajax({
+						url: _spPageContextInfo["webAbsoluteUrl"] + "/_api/web/lists/getbytitle('SiteTemplates')/items",
+						method: "POST",
+						data: JSON.stringify(payloadObject),
+						success: function(data2) {
+							console.log(data2);
+							//TODO: Put up "saved" message
+						}
+					});
+				}
+			},
+			error: function(data) {
+				console.log("Failed call to getTemplates");
+				appendMessage("Could not load templates");
+			}
+		});
+	}
 	return false;
 }
 
@@ -69,6 +116,10 @@ function updateTemplate() {
 
 function loadTemplate() {
 	template = csTemplates[$("#CS-template").val()];
+	$("#siteTemplateName").val($("#CS-template").val());
+	$.each(template.Groups, function(g, group) {
+		$('#listGroup').append('<option>' + group.groupName + "</option>");
+	});
 	displayTemplate();
 	return false;
 }
