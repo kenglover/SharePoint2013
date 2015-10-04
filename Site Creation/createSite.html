@@ -1,3 +1,6 @@
+<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+<script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+
 <h1>The form</h1>
 Name: <input name="CS-name" id="CS-name" type="text" value="" size="50"/> <br/>
 Description: <input name="CS-description" id="CS-description" type="text" value="" size="100"/> <br/>
@@ -6,4 +9,9 @@ URL: <input name="CS-url" id="CS-url" type="text" value="" size="80" /> <br/>
 Template: <select name="CS-template" id="CS-template"></select> <br/>
 Unique Permissions: <select name="CS-permissions" id="CS-permissions"><option>Yes</option><option>No</option></select> <br/>
 <button onclick="doIt();return false;">Create Site</button>
-<div id="CS-results"></div>
+
+<div id="dialog" title="Building Site">
+  <div class="progress-label">Building Site...</div>
+  <div id="progressbar"></div>
+  <div style="height: 200px; overflow-y: scroll;" id="CS-results"></div>
+</div>

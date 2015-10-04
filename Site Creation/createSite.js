@@ -32,6 +32,7 @@ function doIt() {
 	var projectURL = $("#CS-url").val();
 	projectTemplate = csTemplates[$("#CS-template").val()];
 	var projectPermissions = $("#CS-permissions").val() == "Yes"?true:false;
+	dialog.dialog("open");
 	
 	// We will need the group names findable by the group suffix as presented in the template file later on, so create the object now.
 	groupPrefix = "Project " + projectName + " ";
@@ -68,6 +69,7 @@ function doIt() {
 		
 		
 		if (!URLinuse) {
+			incrementMaxProgress();
 			deferedGroup1.push(createNewSite(projectParentURL, projectURL, projectName, projectDescription, projectPermissions));
 				
 			// For each group name suffix
@@ -78,6 +80,7 @@ function doIt() {
 					//console.log(groupName + ": " + createGroup);
 					if (group.createGroup == "Y") {
 						// Create group
+						incrementMaxProgress();					
 						deferedGroup1.push(createNewGroup(group.groupName, projectParentURL + "/" + projectURL, projectName));
 					}
 				});
@@ -89,7 +92,8 @@ function doIt() {
 			$.when.apply($, deferedGroup1).then(function() { 
 				// Site created and groups defined
 				$.each(projectTemplate.Groups, function(index, group) {
-						addGroupToSite(group.groupName,projectParentURL + "/" + projectURL, group.groupPermission, 0);
+					incrementMaxProgress();
+					addGroupToSite(group.groupName,projectParentURL + "/" + projectURL, group.groupPermission, 0);
 				});
 			});
 		}
@@ -100,11 +104,12 @@ function doIt() {
 		$.when.apply($, deferedGroup1).then(function() {
 			$.each(projectTemplate.lists, function(index, list) {
 				// name, type, contentTypes [""], inheritPermssions, permissions [groupName, groupPermission]
+				incrementMaxProgress();
 				createList(list, projectParentURL + "/" + projectURL,0);
 
 			});
 		});
-	
+		progress();
 	}); // End of checkURLpromise
 	
 	return false;
@@ -123,6 +128,7 @@ function createList (list, URL,trycount) {
 		success: function(data) {
 			listID = data.d.Id;
 			appendMessage("Found list " + list.name + "already exists");
+			progress();
 		},
 		error: function() {
 			// List does not exist, create it
@@ -143,6 +149,7 @@ function createList (list, URL,trycount) {
 					if (!list.inheritPermissions) {
 						setListPermissions(listID, list, URL);
 					}
+					progress();
 				},
 				error: function(data) {
 					appendMessage("<b>Error:</b>Could not create list " + list.name)
@@ -159,6 +166,7 @@ function createList (list, URL,trycount) {
 
 function connectContentTypes(listID, list, URL) {
 	$.each(list.contentTypes, function(index, ct) {
+		incrementMaxProgress();
 		console.log("Looking at add CT " + ct + " to list " + list.name);
 		$.ajax({
 			url: _spPageContextInfo["siteAbsoluteUrl"] + "/_api/web/contentTypes?$filter=Name eq '" + ct + "'",
@@ -170,6 +178,7 @@ function connectContentTypes(listID, list, URL) {
 					addCTtoList(ctID, ct, list, URL, 0);
 				} else {
 					appendMessage("Could not find content Type " + ct);
+					progress();
 				}
 			}
 		});
@@ -185,6 +194,7 @@ function connectContentTypes(listID, list, URL) {
 			data: JSON.stringify({"contentTypeId":ctID}),
 			success: function(data) {
 				appendMessage("Added Content Type " + ct + " to list " + list.name + " on try " + trycount);
+				progress();
 			},
 			statusCode: {
 				500: function() {
@@ -209,6 +219,7 @@ function setListPermissions(listID, list, URL) {
 		method: "POST",
 		success: function() {
 			$.each(list.permissions, function(index, permission) {
+				incrementMaxProgress();
 				// Assign permission for this group
 				$.when(getGroupId(permission.groupName,0)).then(function(response) {
 					groupId = response;
@@ -221,6 +232,7 @@ function setListPermissions(listID, list, URL) {
 						method: "POST",
 						success: function(data) {
 							appendMessage("Gave permission to " + permission.groupName + " to list " + list.name);
+							progress();
 						}
 					});
 				});
@@ -234,6 +246,7 @@ function appendMessage(message) {
 }
 
 function getBaseRoles(rootUrl) {
+	incrementMaxProgress();
 	return $.ajax({
 		url: rootUrl + "/_api/Web/roledefinitions",
 		type: "GET",
@@ -241,8 +254,9 @@ function getBaseRoles(rootUrl) {
 			$.each(data.d.results, function(index,result) {
 				baseRoleDefs[result.Name] = result.Id;
 			});
-			console.log("Done baseRoleDefs");
-			console.log(baseRoleDefs);
+			//console.log("Done baseRoleDefs");
+			//console.log(baseRoleDefs);
+			progress();
 		}
 	});
 }
@@ -301,6 +315,7 @@ function addGroupToSite(groupName, URL, permission, trycount) {
 			method: "POST",
 			success: function(data) {
 				appendMessage("Gave group " + groupName + " site permission " + permission);
+				progress();
 			},
 			statusCode: {
 				404: function() {
@@ -333,6 +348,7 @@ function createNewSite(rootUrl, URL, title, description, uniquePermissions) {
 		}),
 		success: function(data) {
 			appendMessage("Created site");
+			progress();
 		},
 		error: function(data) {
 			appendMessage("<b>Failed to create site</b>: no further actions to be taken");
@@ -361,6 +377,7 @@ function createNewGroup(groupName, siteURL, projectName) {
 			appendMessage('Created group: <a href="' + _spPageContextInfo["webAbsoluteUrl"] + '/_layouts/15/people.aspx?MembershipGroupId=' + data.d.Id + '">' + groupName + '</a>');
 			groupIds[groupName].id = data.d.Id;
 			createGroupPromise.resolve();
+			progress();
 		},
 		error: function(data) {
 			console.log("Failed to create group " + groupName);
@@ -392,4 +409,60 @@ function getTemplates() {
 			appendMessage("Could not load templates");
 		}
 	});
+}
+
+var maxProgress = 1,
+  progressbar = $( "#progressbar" ),
+  progressLabel = $( ".progress-label" ),
+  dialogButtons = [],
+  dialog = $( "#dialog" ).dialog({
+	autoOpen: false,
+	closeOnEscape: false,
+	resizable: false,
+	buttons: dialogButtons,
+	open: function() {
+		progressbar.progressbar("value","0");
+		maxProgress = 1;
+	}
+  });
+
+progressbar.progressbar({
+  value: false,
+  max: maxProgress,
+  change: function() {
+	progressLabel.text( "Building Site" );
+  },
+  complete: function() {
+	progressLabel.text( "Complete!" );
+	dialog.dialog( "option", "buttons", [{
+	  text: "Close",
+	  click: closeDialog
+	}]);
+	$(".ui-dialog button").last().focus();
+  }
+});
+
+function incrementMaxProgress(increment) {
+	if(!increment) {
+		  increment = 1;
+	 }
+	maxProgress += increment;
+	progressbar.progressbar("option","max",maxProgress);
+}
+
+function progress(increment) {
+  var val = progressbar.progressbar( "value" ) || 0;
+  
+  if(!increment) {
+	  increment = 1;
+  }
+
+  progressbar.progressbar( "value", val + increment );
+
+}
+
+function closeDialog() {
+  dialog
+	.dialog( "option", "buttons", dialogButtons )
+	.dialog( "close" );
 }
