@@ -7,6 +7,15 @@ var listTemplateTypes = // Would be nice if there was a way to get this from the
 var template = {"Groups":[], "lists":{}}; // The built up template
 var baseRoleDefs = {}; // Permission levels
 var csTemplates = {};
+var  dialog = $( "#dialog" ).dialog({
+	autoOpen: false,
+	closeOnEscape: false,
+	resizable: false,
+	buttons: [{text:"close", 
+		click :function() {
+          $( this ).dialog( "close" );
+        }}]
+  });
 
 
 // Initialize
@@ -82,7 +91,7 @@ function saveTemplate() {
 								"If-Match": data.d.results[0].__metadata.etag },
 						success: function(data2) {
 							console.log(data2);
-							//TODO: Put up "saved" message
+							dialog.dialog("open");
 						}
 					});
 				} else {
@@ -95,7 +104,7 @@ function saveTemplate() {
 						data: JSON.stringify(payloadObject),
 						success: function(data2) {
 							console.log(data2);
-							//TODO: Put up "saved" message
+							dialog.dialog("open");
 						}
 					});
 				}
