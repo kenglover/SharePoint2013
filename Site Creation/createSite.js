@@ -342,7 +342,7 @@ function createNewSite(rootUrl, URL, title, description, uniquePermissions) {
 				'Title': title,
 				'Description': description,
 				'Language': 1033,
-				'WebTemplate': 'sts',
+				'WebTemplate': projectTemplate.Template,
 				'UseUniquePermissions': uniquePermissions
 			}
 		}),
